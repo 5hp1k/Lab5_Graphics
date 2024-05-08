@@ -143,6 +143,10 @@ class ImagePixelizerApp:
             # Преобразование изображения в массив numpy
             img_array = np.array(input_image)
 
+            # Вычисление количества линий сетки
+            grid_width = output_width // pixel_size
+            grid_height = output_height // pixel_size
+
             # Выполнение кластеризации цветов
             # Преобразование в двумерный массив
             reshaped_array = img_array.reshape((-1, 3))
@@ -158,15 +162,8 @@ class ImagePixelizerApp:
             # Создание выходного изображения
             output_image = Image.new('RGB', (output_width, output_height))
 
-            draw = ImageDraw.Draw(output_image)
-            for x in range(0, output_width, pixel_size):
-                draw.line([(x, 0), (x, output_height)], fill='black', width=1)
-            for y in range(0, output_height, pixel_size):
-                draw.line([(0, y), (output_width, y)], fill='black', width=1)
-
             # Замена цветов пикселей на ближайшие из палитры
-            total_pixels = (output_width // pixel_size) * \
-                (output_height // pixel_size)
+            total_pixels = grid_width * grid_height
             processed_pixels = 0
             for y in range(0, input_image.size[1], pixel_size):
                 for x in range(0, input_image.size[0], pixel_size):
@@ -187,6 +184,14 @@ class ImagePixelizerApp:
                     progress_percentage = (
                         processed_pixels / total_pixels) * 100
                     self.update_progress(progress_percentage)
+
+            draw = ImageDraw.Draw(output_image)
+
+            # Рисование сетки между пикселями
+            for x in range(0, output_width, pixel_size):
+                draw.line([(x, 0), (x, output_height)], fill='black', width=1)
+            for y in range(0, output_height, pixel_size):
+                draw.line([(0, y), (output_width, y)], fill='black', width=1)
 
             output_image.show()
         finally:

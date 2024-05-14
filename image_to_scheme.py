@@ -1,22 +1,13 @@
-'''Оконное приложение, которое преобразует
-загруженное в него изображение в схему 
-для вышивания крестиком и меняет оригинальную 
-палитру изображения на палитру DMC'''
-'''Оконное приложение, которое преобразует
-загруженное в него изображение в схему 
-для вышивания крестиком и меняет оригинальную 
-палитру изображения на палитру DMC'''
-
-
-
-
 import tkinter as tk
 from tkinter import filedialog, ttk
 import threading
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from sklearn.cluster import KMeans
 import colorspacious
+from palette import rgb_to_dmc
+
+
 class ImagePixelizerApp:
     '''Главный класс приложения, содержащий в себе всю его функциональность'''
 
@@ -220,7 +211,7 @@ class ImagePixelizerApp:
             # Создание выходного изображения
             output_image = Image.new('RGB', (output_width, output_height))
 
-            # Замена цветов пикселей на ближайшие из палитры
+            # Замена цветов пикселей на ближайшие из палитры DMC
             total_pixels = grid_width * grid_height
             processed_pixels = 0
             for y in range(0, input_image.size[1], self.pixel_size):
@@ -234,11 +225,15 @@ class ImagePixelizerApp:
                         np.mean(img_array[y:y+self.pixel_size, x:x+self.pixel_size],
                                 axis=(0, 1)).astype(int))
                     closest_color = self.find_closest_color(pixel)
+                    closest_color = min(rgb_to_dmc, key=lambda c: np.linalg.norm(
+                        np.array(closest_color) - np.array(c)))  # Замена цвета на ближайший из палитры DMC
                     if closest_color:
                         for i in range(self.pixel_size):
                             for j in range(self.pixel_size):
                                 output_image.putpixel(
                                     (x + i, y + j), closest_color)
+                        self.add_color_number_to_image(
+                            output_image, closest_color)  # Добавление номера цвета
                     processed_pixels += 1
                     progress_percentage = (
                         processed_pixels / total_pixels) * 100
@@ -246,13 +241,15 @@ class ImagePixelizerApp:
 
             draw = ImageDraw.Draw(output_image)
 
-            # Рисование сетки между пикселями
             for x in range(0, output_width, self.pixel_size):
-                draw.line([(x, 0), (x, output_height)], fill='black', width=1)
+                draw.line([(x, 0), (x, output_height)],
+                          fill='black', width=1)
             for y in range(0, output_height, self.pixel_size):
-                draw.line([(0, y), (output_width, y)], fill='black', width=1)
+                draw.line([(0, y), (output_width, y)],
+                          fill='black', width=1)
 
-            output_image.show()
+            self.save_image(output_image)
+            # output_image.show()
         finally:
             # Блокировка кнопки "Cancel"
             self.cancel_button.configure(state="disabled")
@@ -264,6 +261,19 @@ class ImagePixelizerApp:
             self.progress_bar["value"] = 0
 
             self.progress_label.config(text="")
+
+    def add_color_number_to_image(self, image, color):
+        '''Метод для добавления номера цвета в правый верхний угол изображения'''
+        draw = ImageDraw.Draw(image)
+        text = rgb_to_dmc[color]  # Получаем номер цвета DMC из словаря
+        font = ImageFont.truetype("arial.ttf", 12)
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        text_size = (text_width, text_height)
+        # Положение текста в углу
+        draw.text(
+            (image.width - text_size[0] - 10, 10), text, fill='black', font=font)
 
     def find_closest_color(self, rgb_color):
         '''Метод, определяющий ближайший цвет из палитры'''
@@ -295,6 +305,17 @@ class ImagePixelizerApp:
         else:
             # Если размер не выбран, устанавливаем значение по умолчанию, равное 1
             self.pixel_size = 1
+
+    def save_image(self, output_image):
+        '''Метод для сохранения изображения'''
+        # Запрашиваем у пользователя путь для сохранения файла
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".jpg", filetypes=[("JPEG files", "*.jpg"), ("All files", "*.*")]
+        )
+
+        # Если пользователь выбрал файл и ввел имя, сохраняем изображение
+        if file_path:
+            output_image.save(file_path)
 
 
 if __name__ == "__main__":

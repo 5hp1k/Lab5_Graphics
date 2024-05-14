@@ -2,6 +2,14 @@
 загруженное в него изображение в схему 
 для вышивания крестиком и меняет оригинальную 
 палитру изображения на палитру DMC'''
+'''Оконное приложение, которое преобразует
+загруженное в него изображение в схему 
+для вышивания крестиком и меняет оригинальную 
+палитру изображения на палитру DMC'''
+
+
+
+
 import tkinter as tk
 from tkinter import filedialog, ttk
 import threading
@@ -9,8 +17,6 @@ from PIL import Image, ImageDraw
 import numpy as np
 from sklearn.cluster import KMeans
 import colorspacious
-
-
 class ImagePixelizerApp:
     '''Главный класс приложения, содержащий в себе всю его функциональность'''
 
@@ -18,6 +24,9 @@ class ImagePixelizerApp:
         self.root = root
         self.root.title("Stitch Scheme Builder")
         self.root.resizable(width=False, height=False)
+
+        # Стандартный размер пикселя выходного изображения
+        self.pixel_size = 1
 
         # Создание элементов управления
         self.input_label = tk.Label(root, text="Input Image:")
@@ -28,23 +37,29 @@ class ImagePixelizerApp:
             root, text="Choose Image", command=self.choose_image)
         self.input_image_button.grid(row=0, column=1, padx=10, pady=10)
 
-        self.pixel_size_label = tk.Label(root, text="Pixel Size:")
-        self.pixel_size_label.grid(row=1, column=0, padx=10, pady=10)
-
-        self.pixel_size_entry = tk.Entry(root)
-        self.pixel_size_entry.grid(row=1, column=1, padx=10, pady=10)
-
         self.width_label = tk.Label(root, text="Output Width:")
-        self.width_label.grid(row=2, column=0, padx=10, pady=10)
+        self.width_label.grid(row=1, column=0, padx=10, pady=10)
 
         self.width_entry = tk.Entry(root)
-        self.width_entry.grid(row=2, column=1, padx=10, pady=10)
+        self.width_entry.grid(row=1, column=1, padx=10, pady=10)
+        # Привязываем функцию к событию изменения текста в поле ширины
+        self.width_entry.bind('<KeyRelease>', self.update_pixel_dropdown)
 
         self.height_label = tk.Label(root, text="Output Height:")
-        self.height_label.grid(row=3, column=0, padx=10, pady=10)
+        self.height_label.grid(row=2, column=0, padx=10, pady=10)
 
         self.height_entry = tk.Entry(root)
-        self.height_entry.grid(row=3, column=1, padx=10, pady=10)
+        self.height_entry.grid(row=2, column=1, padx=10, pady=10)
+        # Привязываем функцию к событию изменения текста в поле высоты
+        self.height_entry.bind('<KeyRelease>', self.update_pixel_dropdown)
+
+        self.pixel_size_label = tk.Label(root, text="Pixel Size:")
+        self.pixel_size_label.grid(row=3, column=0, padx=10, pady=10)
+        # Выпадающий список для выбора размерности пикселя
+        self.pixel_size_var = tk.StringVar(root)
+        self.pixel_size_dropdown = ttk.Combobox(
+            root, textvariable=self.pixel_size_var, state='readonly')
+        self.pixel_size_dropdown.grid(row=3, column=1, padx=10, pady=10)
 
         self.color_count_label = tk.Label(root, text="Color Count:")
         self.color_count_label.grid(row=4, column=0, padx=10, pady=10)
@@ -74,13 +89,53 @@ class ImagePixelizerApp:
         self.palette = None
         self.cancel_flag = False  # Флаг для отмены выполнения потока
 
+        # Обновляем выпадающий список при создании приложения
+        self.update_pixel_size_dropdown()
+
+    def update_pixel_dropdown(self, event=None):
+        '''Метод для обновления выпадающего списка при изменении значений в текстовых полях'''
+        self.update_pixel_size_dropdown()
+
+    def update_pixel_size_dropdown(self):
+        '''Метод для обновления выпадающего списка с размерностью пикселя'''
+        # Получаем новые значения ширины и высоты изображения из текстовых полей
+        output_width = self.width_entry.get()
+        output_height = self.height_entry.get()
+
+        # Проверяем, что значения ширины и высоты являются целыми числами
+        try:
+            output_width = int(output_width)
+            output_height = int(output_height)
+        except ValueError:
+            # Если значения не могут быть преобразованы в целые числа, выходим из функции
+            return
+
+        # Очищаем список
+        self.pixel_size_dropdown['values'] = []
+
+        # Находим все общие делители ширины и высоты изображения
+        common_divisors = []
+        for i in range(1, min(output_width, output_height) + 1):
+            if output_width % i == 0 and output_height % i == 0:
+                common_divisors.append(i)
+
+        # Добавляем общие делители в список размеров пикселя
+        self.pixel_size_dropdown['values'] = common_divisors
+
+        # Устанавливаем значение по умолчанию как первый общий делитель
+        if common_divisors:
+            self.pixel_size_dropdown.current(0)
+        else:
+            # Если общих делителей нет, устанавливаем пустое значение
+            self.pixel_size_dropdown.set('')
+
     def choose_image(self):
         '''Метод, открывающий диалоговое окно для выбора загружаемого изображения'''
         self.input_image_path = filedialog.askopenfilename()
 
     def toggle_controls(self, state):
         '''Метод для блокировки или разблокировки элементов управления'''
-        for widget in [self.input_image_button, self.pixel_size_entry,
+        for widget in [self.input_image_button, self.pixel_size_dropdown,
                        self.width_entry, self.height_entry,
                        self.color_count_entry, self.pixelize_button]:
             widget.configure(state=state)
@@ -100,7 +155,7 @@ class ImagePixelizerApp:
         thread.start()
 
         if thread.is_alive():
-            print('Thread has ben started')
+            print('Thread has been started')
             self.progress_label.config(
                 text="Image generation will begin shortly")
 
@@ -132,7 +187,6 @@ class ImagePixelizerApp:
     def pixelize_image(self):
         '''Метод для преобразования исходного изображения в пикселизованное'''
         try:
-            pixel_size = int(self.pixel_size_entry.get())
             output_width = int(self.width_entry.get())
             output_height = int(self.height_entry.get())
             color_count = int(self.color_count_entry.get())
@@ -148,8 +202,8 @@ class ImagePixelizerApp:
             img_array = np.array(input_image)
 
             # Вычисление количества линий сетки
-            grid_width = output_width // pixel_size
-            grid_height = output_height // pixel_size
+            grid_width = output_width // self.pixel_size
+            grid_height = output_height // self.pixel_size
 
             # Выполнение кластеризации цветов
             # Преобразование в двумерный массив
@@ -169,19 +223,20 @@ class ImagePixelizerApp:
             # Замена цветов пикселей на ближайшие из палитры
             total_pixels = grid_width * grid_height
             processed_pixels = 0
-            for y in range(0, input_image.size[1], pixel_size):
-                for x in range(0, input_image.size[0], pixel_size):
+            for y in range(0, input_image.size[1], self.pixel_size):
+                for x in range(0, input_image.size[0], self.pixel_size):
                     # Проверяем флаг отмены
                     if self.cancel_flag:
                         # Прерываем выполнение и сбрасываем флаг, если он установлен в True
                         self.cancel_flag = False
                         return
                     pixel = tuple(
-                        np.mean(img_array[y:y+pixel_size, x:x+pixel_size], axis=(0, 1)).astype(int))
+                        np.mean(img_array[y:y+self.pixel_size, x:x+self.pixel_size],
+                                axis=(0, 1)).astype(int))
                     closest_color = self.find_closest_color(pixel)
                     if closest_color:
-                        for i in range(pixel_size):
-                            for j in range(pixel_size):
+                        for i in range(self.pixel_size):
+                            for j in range(self.pixel_size):
                                 output_image.putpixel(
                                     (x + i, y + j), closest_color)
                     processed_pixels += 1
@@ -192,9 +247,9 @@ class ImagePixelizerApp:
             draw = ImageDraw.Draw(output_image)
 
             # Рисование сетки между пикселями
-            for x in range(0, output_width, pixel_size):
+            for x in range(0, output_width, self.pixel_size):
                 draw.line([(x, 0), (x, output_height)], fill='black', width=1)
-            for y in range(0, output_height, pixel_size):
+            for y in range(0, output_height, self.pixel_size):
                 draw.line([(0, y), (output_width, y)], fill='black', width=1)
 
             output_image.show()
@@ -211,7 +266,7 @@ class ImagePixelizerApp:
             self.progress_label.config(text="")
 
     def find_closest_color(self, rgb_color):
-        '''Метод, определяющий ближайший цвет из палитры к '''
+        '''Метод, определяющий ближайший цвет из палитры'''
         if self.palette is None:
             return None
 
@@ -232,8 +287,19 @@ class ImagePixelizerApp:
         lab2 = colorspacious.cspace_convert(rgb2, "sRGB255", "CAM02-UCS")
         return np.linalg.norm(lab1 - lab2)
 
+    def update_pixel_size(self):
+        '''Метод для обновления переменной размерности пикселя'''
+        selected_size = self.pixel_size_dropdown.get()
+        if selected_size:
+            self.pixel_size = int(selected_size)
+        else:
+            # Если размер не выбран, устанавливаем значение по умолчанию, равное 1
+            self.pixel_size = 1
+
 
 if __name__ == "__main__":
     root = tk.Tk()
     app = ImagePixelizerApp(root)
+    app.pixel_size_dropdown.bind(
+        "<<ComboboxSelected>>", lambda event=None: app.update_pixel_size())
     root.mainloop()

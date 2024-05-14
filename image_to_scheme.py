@@ -182,6 +182,8 @@ class ImagePixelizerApp:
             output_height = int(self.height_entry.get())
             color_count = int(self.color_count_entry.get())
 
+            num_pallette = []
+
             if not self.input_image_path:
                 print("Please choose an input image.")
                 return
@@ -232,14 +234,29 @@ class ImagePixelizerApp:
                             for j in range(self.pixel_size):
                                 output_image.putpixel(
                                     (x + i, y + j), closest_color)
-                        self.add_color_number_to_image(
-                            output_image, closest_color)  # Добавление номера цвета
                     processed_pixels += 1
                     progress_percentage = (
                         processed_pixels / total_pixels) * 100
                     self.update_progress(progress_percentage)
 
             draw = ImageDraw.Draw(output_image)
+
+            for y in range(0, input_image.size[1], self.pixel_size):
+                for x in range(0, input_image.size[0], self.pixel_size):
+                    pixel = tuple(
+                        np.mean(img_array[y:y + self.pixel_size, x:x + self.pixel_size], axis=(0, 1)).astype(int))
+                    closest_color = self.find_closest_color(pixel)
+                    closest_color = min(rgb_to_dmc, key=lambda c: np.linalg.norm(
+                        np.array(closest_color) - np.array(c)))
+                    dmc_color = rgb_to_dmc[closest_color]
+                    if closest_color not in num_pallette:
+                        num_pallette.append(closest_color)
+                    if dmc_color:
+                        draw.rectangle(
+                            [(x, y), (x + self.pixel_size, y + self.pixel_size)],
+                            fill=tuple(closest_color))
+                    draw.text((x+2, y+2), str(num_pallette.index(closest_color)),
+                              fill="white", font=ImageFont.truetype("arial.ttf", self.pixel_size//2))
 
             for x in range(0, output_width, self.pixel_size):
                 draw.line([(x, 0), (x, output_height)],
@@ -248,8 +265,16 @@ class ImagePixelizerApp:
                 draw.line([(0, y), (output_width, y)],
                           fill='black', width=1)
 
+            legend = Image.new('RGB', (color_count * 50, 50), 'white')
+            legend_draw = ImageDraw.Draw(legend)
+            for i, color in enumerate(num_pallette):
+                legend_draw.rectangle(
+                    [(i * 50, 0), (i * 50 + 50, 50)], fill=tuple(color))
+                legend_draw.text(
+                    (i * 50 + 5, 5), f"{i}\nDMC:{rgb_to_dmc[color]}", fill=(0, 255, 0), font=ImageFont.truetype("arial.ttf", 10))
+
             self.save_image(output_image)
-            # output_image.show()
+            self.save_image(legend)
         finally:
             # Блокировка кнопки "Cancel"
             self.cancel_button.configure(state="disabled")
@@ -261,19 +286,6 @@ class ImagePixelizerApp:
             self.progress_bar["value"] = 0
 
             self.progress_label.config(text="")
-
-    def add_color_number_to_image(self, image, color):
-        '''Метод для добавления номера цвета в правый верхний угол изображения'''
-        draw = ImageDraw.Draw(image)
-        text = rgb_to_dmc[color]  # Получаем номер цвета DMC из словаря
-        font = ImageFont.truetype("arial.ttf", 12)
-        text_bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = text_bbox[2] - text_bbox[0]
-        text_height = text_bbox[3] - text_bbox[1]
-        text_size = (text_width, text_height)
-        # Положение текста в углу
-        draw.text(
-            (image.width - text_size[0] - 10, 10), text, fill='black', font=font)
 
     def find_closest_color(self, rgb_color):
         '''Метод, определяющий ближайший цвет из палитры'''
@@ -310,9 +322,7 @@ class ImagePixelizerApp:
         '''Метод для сохранения изображения'''
         # Запрашиваем у пользователя путь для сохранения файла
         file_path = filedialog.asksaveasfilename(
-            defaultextension=".jpg", filetypes=[("JPEG files", "*.jpg"), ("All files", "*.*")]
-        )
-
+            defaultextension=".jpg", filetypes=[("JPEG files", "*.jpg"), ("All files", "*.*")])
         # Если пользователь выбрал файл и ввел имя, сохраняем изображение
         if file_path:
             output_image.save(file_path)
